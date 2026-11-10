@@ -12,23 +12,22 @@ export async function GET(request: Request) {
         const settings = await prisma.siteSettings.findUnique({
           where: { id: 'default' },
         });
-        serverAddress = settings?.serverIp || 'play.plumya.net';
+        const ip = settings?.serverIp || 'play.plumya.net';
+        const port = settings?.serverPort;
+        serverAddress = port && port !== '25565' ? `${ip}:${port}` : ip;
       } catch {
         serverAddress = 'play.plumya.net';
       }
     }
 
-    // Clean address (remove port if passed like play.server.com:25565)
-    const host = serverAddress.split(':')[0];
-
-    // Fetch from mcstatus.io Java status API
+    // Fetch from mcsrvstat.us v3 status API
     const response = await fetch(
-      `https://api.mcstatus.io/v2/status/java/${encodeURIComponent(host)}`,
+      `https://api.mcsrvstat.us/3/${encodeURIComponent(serverAddress)}`,
       {
         headers: {
           'User-Agent': 'Plumya-MC-Web/1.0',
         },
-        // Cache response for 30 seconds to prevent rate-limiting mcstatus.io
+        // Cache response for 30 seconds
         next: { revalidate: 30 },
       }
     );
@@ -39,31 +38,35 @@ export async function GET(request: Request) {
         online: false,
         playersOnline: 0,
         playersMax: 200,
-        error: 'mcstatus.io yanıt vermedi.',
+        error: 'mcsrvstat.us yanıt vermedi.',
       });
     }
 
     const data = await response.json();
 
     if (data.online) {
+      const motdClean = Array.isArray(data.motd?.clean)
+        ? data.motd.clean.join(' ')
+        : (data.motd?.clean || null);
+
       return NextResponse.json({
         success: true,
         online: true,
-        host: data.host,
-        ipAddress: data.ip_address,
+        host: data.hostname || serverAddress,
+        ipAddress: data.ip,
         port: data.port,
         playersOnline: data.players?.online ?? 0,
         playersMax: data.players?.max ?? 200,
-        version: data.version?.name_clean || '1.16 - 1.21+',
-        motd: data.motd?.clean || null,
+        version: typeof data.version === 'string' ? data.version : (data.protocol?.name || '1.16 - 1.21+'),
+        motd: motdClean,
         icon: data.icon || null,
-        retrievedAt: data.retrieved_at,
+        retrievedAt: Date.now(),
       });
     } else {
       return NextResponse.json({
         success: true,
         online: false,
-        host: data.host || host,
+        host: data.hostname || serverAddress,
         playersOnline: 0,
         playersMax: 200,
         motd: null,

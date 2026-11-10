@@ -33,6 +33,7 @@ export default function HomePage() {
   const { settings, news, users } = useApp();
   const [copyResult, setCopyResult] = useState<"idle" | "copied" | "failed">("idle");
   const [online, setOnline] = useState<number | null>(null);
+  const [maxOnline, setMaxOnline] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
   const ip = settings.serverIp || settings.serverIP || "play.plumya.net";
   const address = settings.serverPort && settings.serverPort !== "25565" ? ip + ":" + settings.serverPort : ip;
@@ -41,10 +42,13 @@ export default function HomePage() {
     let alive = true;
     const load = async () => {
       try {
-        const res = await fetch(`/api/mc-status?server=${encodeURIComponent(ip)}`);
+        const res = await fetch(`/api/mc-status?server=${encodeURIComponent(address)}`);
         if (!res.ok) return;
         const d = await res.json();
-        if (alive && d.online) setOnline(d.playersOnline);
+        if (alive && d.online) {
+          setOnline(d.playersOnline);
+          if (typeof d.playersMax === "number") setMaxOnline(d.playersMax);
+        }
       } catch {
         /* fall back to settings */
       }
@@ -55,7 +59,7 @@ export default function HomePage() {
       alive = false;
       clearInterval(t);
     };
-  }, [ip]);
+  }, [address]);
 
   const copy = async () => {
     try {
@@ -73,6 +77,7 @@ export default function HomePage() {
   }, [copyResult]);
 
   const players = online ?? settings.onlinePlayers ?? 0;
+  const maxPlayers = maxOnline ?? settings.maxPlayers ?? 200;
   const [lead, ...rest] = news;
   const restShown = showAll ? rest : rest.slice(0, 2);
   const faq = FAQ(ip, settings.serverPort);
@@ -101,7 +106,7 @@ export default function HomePage() {
             </button>
             <span className="plumya-panel plumya-server-editions">Minecraft 1.20+ · Java ve Bedrock</span>
             <span className="plumya-panel plumya-player-count">
-              <strong>{players.toLocaleString("tr-TR")} / {(settings.maxPlayers || 200).toLocaleString("tr-TR")}</strong>
+              <strong>{players.toLocaleString("tr-TR")} / {maxPlayers.toLocaleString("tr-TR")}</strong>
               <span className="plumya-server-label">Oyuncu</span>
             </span>
           </div>
